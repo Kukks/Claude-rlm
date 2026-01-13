@@ -8,6 +8,13 @@ env/
 venv/
 .venv
 
+# Go build artifacts
+bin/
+*.exe
+*.dll
+*.dylib
+dist/
+
 # RLM generated files
 .rlm_state.json
 .rlm_cache/
