@@ -119,13 +119,13 @@ func (o *Orchestrator) AnalyzeDocument(ctx context.Context, documentPath, query 
 	for {
 		iterations++
 
-		// Safety checks
-		if iterations > o.config.MaxIterations {
-			return nil, ErrMaxIterationsExceeded
-		}
-
+		// Safety checks (check depth first for better error messages)
 		if o.currentTask.Depth > o.config.MaxRecursionDepth {
 			return nil, ErrMaxDepthExceeded
+		}
+
+		if iterations > o.config.MaxIterations {
+			return nil, ErrMaxIterationsExceeded
 		}
 
 		// Track max depth
@@ -139,31 +139,27 @@ func (o *Orchestrator) AnalyzeDocument(ctx context.Context, documentPath, query 
 			Int("stack_size", len(o.stack)).
 			Msg("Dispatching subagent")
 
+		var result *SubagentResult
+
 		// Check cache first
 		if cachedResult := o.CheckCache(&o.currentTask); cachedResult != nil {
 			o.stats.CacheHits++
 			o.logger.Debug().Msg("Using cached result")
-			result := &SubagentResult{
+			result = &SubagentResult{
 				Type:     ResultTypeAnalysis,
 				Analysis: cachedResult,
 			}
-
-			// Process the cached result through the same logic
-			if err := o.processResult(ctx, result); err != nil {
-				return nil, err
+		} else {
+			// Dispatch to subagent
+			var err error
+			result, err = o.dispatcher(ctx, &o.currentTask)
+			if err != nil {
+				return nil, fmt.Errorf("subagent dispatch failed: %w", err)
 			}
-			continue
+			o.stats.TotalSubagentCalls++
 		}
 
-		// Dispatch to subagent
-		result, err := o.dispatcher(ctx, &o.currentTask)
-		if err != nil {
-			return nil, fmt.Errorf("subagent dispatch failed: %w", err)
-		}
-
-		o.stats.TotalSubagentCalls++
-
-		// Process result
+		// Process result (both cached and dispatched results)
 		if err := o.processResult(ctx, result); err != nil {
 			return nil, err
 		}
@@ -172,10 +168,6 @@ func (o *Orchestrator) AnalyzeDocument(ctx context.Context, documentPath, query 
 		if len(o.stack) == 0 && result.IsAnalysis() {
 			// Clean up state file on completion
 			o.ClearState()
-
-			// Accumulate stats from final result
-			o.stats.TotalTokens += result.Analysis.TokenCount
-			o.stats.TotalCostUSD += result.Analysis.CostUSD
 
 			return result.Analysis, nil
 		}

@@ -13,6 +13,7 @@ import (
 
 func TestOrchestratorCreation(t *testing.T) {
 	config := orchestrator.DefaultConfig()
+	config.WorkDir = t.TempDir() // Use temp directory for cache/state
 	logger := zerolog.Nop()
 
 	orch := orchestrator.New(config, logger)
@@ -21,6 +22,7 @@ func TestOrchestratorCreation(t *testing.T) {
 
 func TestTrampolinePattern(t *testing.T) {
 	config := orchestrator.DefaultConfig()
+	config.WorkDir = t.TempDir() // Use temp directory for cache/state
 	logger := zerolog.Nop()
 
 	orch := orchestrator.New(config, logger)
@@ -56,6 +58,7 @@ func TestTrampolinePattern(t *testing.T) {
 
 func TestCaching(t *testing.T) {
 	config := orchestrator.DefaultConfig()
+	config.WorkDir = t.TempDir() // Use temp directory for cache/state
 	config.CacheEnabled = true
 	config.CacheTTL = 1 * time.Hour
 	logger := zerolog.Nop()
@@ -97,6 +100,7 @@ func TestCaching(t *testing.T) {
 
 func TestMaxDepthLimit(t *testing.T) {
 	config := orchestrator.DefaultConfig()
+	config.WorkDir = t.TempDir() // Use temp directory for cache/state
 	config.MaxRecursionDepth = 2
 	logger := zerolog.Nop()
 
