@@ -176,6 +176,20 @@ def check_python_version():
         print()
         return True
 
+def check_chromadb():
+    """Check if ChromaDB is installed for semantic search"""
+    try:
+        import chromadb
+        print(f"✅ ChromaDB {chromadb.__version__} (semantic search enabled)")
+        print()
+        return True
+    except ImportError:
+        print("⚠️  ChromaDB not installed (semantic search disabled)")
+        print("   Recommended: pip install chromadb")
+        print("   Without it: Uses basic keyword search instead")
+        print()
+        return False
+
 def test_server():
     """Test if RLM server can start"""
     rlm_path = get_rlm_path()
@@ -198,6 +212,9 @@ def main():
         print("Please upgrade Python: https://www.python.org/downloads/")
         sys.exit(1)
 
+    # Check ChromaDB for semantic search
+    has_chromadb = check_chromadb()
+
     # Test server exists
     if not test_server():
         sys.exit(1)
@@ -210,6 +227,22 @@ def main():
 
     print("=" * 70)
     print()
+
+    if not has_chromadb:
+        print("🚀 RECOMMENDED: Install ChromaDB for semantic search")
+        print("   pip install chromadb")
+        print()
+        print("   Benefits:")
+        print("   • Find 'auth bugs' → discovers 'login vulnerabilities'")
+        print("   • Semantic understanding of code and queries")
+        print("   • 10x better search quality than keyword matching")
+        print()
+        print("   Or install all optional dependencies:")
+        print("   pip install -r requirements.txt")
+        print()
+        print("=" * 70)
+        print()
+
     print("📚 Documentation:")
     print("   - Quick Start: QUICKSTART_MCP.md")
     print("   - Full Guide: MCP_INTEGRATION.md")

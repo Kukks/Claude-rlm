@@ -53,18 +53,30 @@ Based on the RLM research paper:
 ```bash
 git clone https://github.com/Kukks/claude-rlm.git
 cd claude-rlm
+
+# Optional: Install semantic search (Recommended!)
+pip install chromadb
+
+# Run installer
 python3 install.py
 ```
 
 The installer will:
 - ✅ Detect your OS (Windows/Mac/Linux)
 - ✅ Find **Claude Desktop** or **Claude Code CLI**
+- ✅ Check for ChromaDB (semantic search)
 - ✅ Generate correct config with absolute paths
 - ✅ Provide step-by-step instructions for your setup
 
 **Supports:**
 - **Claude Desktop** - GUI app on Windows/macOS/Linux
 - **Claude Code CLI** - Terminal-based on all platforms
+
+**Optional Dependencies:**
+- **ChromaDB** - Semantic search (finds "login bugs" when you search "auth issues")
+  - Install: `pip install chromadb`
+  - Without it: Falls back to keyword search
+  - Recommended for best search quality!
 
 ### Manual Installation
 
