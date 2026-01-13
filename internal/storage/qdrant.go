@@ -8,41 +8,58 @@ import (
 	"path/filepath"
 
 	"github.com/google/uuid"
-	pb "github.com/qdrant/go-client/qdrant"
+	"github.com/kukks/claude-rlm/internal/embeddings"
+	"github.com/qdrant/go-client/qdrant"
 )
 
 // QdrantBackend implements storage using Qdrant vector database
 type QdrantBackend struct {
-	client         pb.QdrantClient
-	collectionName string
-	ragDir         string
+	client     *qdrant.Client
+	embedder   *embeddings.OllamaEmbedder
+	collection string
+	ragDir     string
 }
 
 // NewQdrantBackend creates a new Qdrant storage backend
 func NewQdrantBackend(ctx context.Context, config *Config) (*QdrantBackend, error) {
+	// Parse host and port from address
+	host := "localhost"
+	port := 6334
+	// Note: Could parse config.QdrantAddress to extract host:port if needed
+
+	// Create Ollama embedder
+	embedder := embeddings.NewOllamaEmbedder("", "") // Use defaults
+
+	// Check if Ollama is available
+	if !embedder.IsAvailable(ctx) {
+		return nil, fmt.Errorf("Ollama is not available - install Ollama and run: ollama pull all-minilm:l6-v2")
+	}
+
 	// Connect to Qdrant
-	conn, err := pb.NewQdrantClient(ctx, &pb.Config{
-		Address: config.QdrantAddress,
+	client, err := qdrant.NewClient(&qdrant.Config{
+		Host: host,
+		Port: port,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Qdrant: %w", err)
 	}
 
 	backend := &QdrantBackend{
-		client:         conn,
-		collectionName: config.CollectionName,
-		ragDir:         config.RAGDir,
+		client:     client,
+		embedder:   embedder,
+		collection: config.CollectionName,
+		ragDir:     config.RAGDir,
 	}
 
 	// Ensure collection exists
 	if err := backend.ensureCollection(ctx); err != nil {
-		conn.Close()
+		client.Close()
 		return nil, fmt.Errorf("failed to create collection: %w", err)
 	}
 
 	// Ensure RAG directory exists
 	if err := os.MkdirAll(config.RAGDir, 0755); err != nil {
-		conn.Close()
+		client.Close()
 		return nil, fmt.Errorf("failed to create RAG directory: %w", err)
 	}
 
@@ -51,30 +68,26 @@ func NewQdrantBackend(ctx context.Context, config *Config) (*QdrantBackend, erro
 
 // ensureCollection creates the collection if it doesn't exist
 func (q *QdrantBackend) ensureCollection(ctx context.Context) error {
-	// Check if collection exists
+	// List existing collections (returns []string)
 	collections, err := q.client.ListCollections(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to list collections: %w", err)
 	}
 
-	for _, col := range collections.GetCollections() {
-		if col.GetName() == q.collectionName {
+	// Check if our collection exists
+	for _, colName := range collections {
+		if colName == q.collection {
 			return nil // Collection already exists
 		}
 	}
 
-	// Create collection with text embeddings
-	// Qdrant's FastEmbed uses 384-dimensional vectors (all-MiniLM-L6-v2)
-	_, err = q.client.CreateCollection(ctx, &pb.CreateCollection{
-		CollectionName: q.collectionName,
-		VectorsConfig: &pb.VectorsConfig{
-			Config: &pb.VectorsConfig_Params{
-				Params: &pb.VectorParams{
-					Size:     384,
-					Distance: pb.Distance_Cosine,
-				},
-			},
-		},
+	// Create collection with 384-dimensional vectors (all-minilm:l6-v2 output)
+	err = q.client.CreateCollection(ctx, &qdrant.CreateCollection{
+		CollectionName: q.collection,
+		VectorsConfig: qdrant.NewVectorsConfig(&qdrant.VectorParams{
+			Size:     uint64(q.embedder.GetDimensions()),
+			Distance: qdrant.Distance_Cosine,
+		}),
 	})
 
 	return err
@@ -94,8 +107,14 @@ func (q *QdrantBackend) Store(ctx context.Context, data *AnalysisData) error {
 	contentJSON, _ := json.Marshal(data.Result)
 	content := fmt.Sprintf("Query: %s\nFocus: %s\nResult: %s", data.Query, data.Focus, string(contentJSON))
 
+	// Generate embedding using Ollama (returns []float32)
+	embedding, err := q.embedder.Embed(ctx, content)
+	if err != nil {
+		return fmt.Errorf("failed to generate embedding: %w", err)
+	}
+
 	// Prepare metadata payload
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"id":        data.ID,
 		"query":     data.Query,
 		"focus":     data.Focus,
@@ -103,30 +122,16 @@ func (q *QdrantBackend) Store(ctx context.Context, data *AnalysisData) error {
 		"path":      data.Path,
 	}
 
-	// Convert metadata to Qdrant payload
-	payload, err := pb.NewStruct(metadata)
-	if err != nil {
-		return fmt.Errorf("failed to create payload: %w", err)
-	}
-
-	// Upsert to Qdrant with text (Qdrant will embed it automatically using FastEmbed)
-	point := &pb.PointStruct{
-		Id: &pb.PointId{
-			PointIdOptions: &pb.PointId_Uuid{
-				Uuid: data.ID,
+	// Upsert to Qdrant
+	_, err = q.client.Upsert(ctx, &qdrant.UpsertPoints{
+		CollectionName: q.collection,
+		Points: []*qdrant.PointStruct{
+			{
+				Id:      qdrant.NewIDNum(uint64(uuid.MustParse(data.ID).ID())), // Use UUID numeric ID
+				Vectors: qdrant.NewVectors(embedding...),
+				Payload: qdrant.NewValueMap(metadata),
 			},
 		},
-		Vectors: &pb.Vectors{
-			VectorsOptions: &pb.Vectors_Text{
-				Text: content,
-			},
-		},
-		Payload: payload,
-	}
-
-	_, err = q.client.Upsert(ctx, &pb.UpsertPoints{
-		CollectionName: q.collectionName,
-		Points:         []*pb.PointStruct{point},
 	})
 
 	if err != nil {
@@ -148,20 +153,18 @@ func (q *QdrantBackend) Store(ctx context.Context, data *AnalysisData) error {
 
 // Search performs semantic search using Qdrant
 func (q *QdrantBackend) Search(ctx context.Context, query string, limit int) ([]*SearchResult, error) {
-	// Search Qdrant using text query (FastEmbed will embed it)
-	searchResult, err := q.client.Search(ctx, &pb.SearchPoints{
-		CollectionName: q.collectionName,
-		Limit:          uint64(limit),
-		Vector: &pb.Vector{
-			Data: &pb.Vector_Text{
-				Text: query,
-			},
-		},
-		WithPayload: &pb.WithPayloadSelector{
-			SelectorOptions: &pb.WithPayloadSelector_Enable{
-				Enable: true,
-			},
-		},
+	// Generate embedding for query (returns []float32)
+	queryEmbedding, err := q.embedder.Embed(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate query embedding: %w", err)
+	}
+
+	// Search Qdrant
+	searchResult, err := q.client.Query(ctx, &qdrant.QueryPoints{
+		CollectionName: q.collection,
+		Query:          qdrant.NewQuery(queryEmbedding...),
+		Limit:          qdrant.PtrOf(uint64(limit)),
+		WithPayload:    qdrant.NewWithPayload(true),
 	})
 
 	if err != nil {
@@ -180,13 +183,8 @@ func (q *QdrantBackend) Search(ctx context.Context, query string, limit int) ([]
 			continue // Skip if JSON file not found
 		}
 
-		// Convert distance to score (0-100, higher is better)
-		// Cosine distance: 0 = identical, 2 = opposite
-		// Convert to score: 100 - (distance * 50)
-		score := 100.0 - (float64(point.GetScore()) * 50.0)
-		if score < 0 {
-			score = 0
-		}
+		// Convert score to 0-100 (Qdrant returns 0-1 for cosine similarity)
+		score := float64(point.GetScore()) * 100.0
 
 		results = append(results, &SearchResult{
 			Data:         data,
@@ -220,7 +218,10 @@ func (q *QdrantBackend) GetAll(ctx context.Context) ([]*AnalysisData, error) {
 
 // Close cleans up resources
 func (q *QdrantBackend) Close() error {
-	return q.client.Close()
+	if q.client != nil {
+		return q.client.Close()
+	}
+	return nil
 }
 
 // Name returns the backend name
