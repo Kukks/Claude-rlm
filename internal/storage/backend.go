@@ -44,19 +44,14 @@ func DefaultConfig(ragDir string) *Config {
 
 // NewBackend creates a storage backend with automatic fallback
 func NewBackend(ctx context.Context, config *Config) (Backend, error) {
-	// Try Qdrant first if enabled
+	// TODO: Qdrant backend requires embedding model integration
+	// The go-client doesn't support server-side FastEmbed text embeddings
+	// For now, always use JSON backend with keyword search
 	if config.QdrantEnabled {
-		if isQdrantAvailable(ctx, config.QdrantAddress) {
-			backend, err := NewQdrantBackend(ctx, config)
-			if err == nil {
-				return backend, nil
-			}
-			// Log warning but continue to fallback
-			fmt.Fprintf(os.Stderr, "Warning: Qdrant unavailable (%v), falling back to JSON\n", err)
-		}
+		fmt.Fprintf(os.Stderr, "Note: Qdrant support pending embedding integration, using JSON backend\n")
 	}
 
-	// Fallback to JSON backend
+	// Use JSON backend
 	return NewJSONBackend(config)
 }
 
