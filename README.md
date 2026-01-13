@@ -34,7 +34,7 @@ The Claude RLM plugin implements the Recursive Language Models pattern from [Dee
 
 Claude automatically calls RLM when needed. Results stored in your repo for instant retrieval later!
 
-👉 **[5-Minute Setup Guide](QUICKSTART_MCP.md)** | **[Full MCP Guide](MCP_INTEGRATION.md)** | **[Example Prompts](EXAMPLE_PROMPTS.md)**
+👉 **[5-Minute Setup Guide](QUICKSTART_MCP.md)** | **[Full MCP Guide](MCP_INTEGRATION.md)** | **[Example Prompts](EXAMPLE_PROMPTS.md)** | **[Semantic Search Guide](SEMANTIC_SEARCH.md)**
 
 ### Benefits
 
@@ -499,6 +499,21 @@ python -m pytest tests/
 # Test orchestrator
 python src/orchestrator.py test.txt "test query"
 ```
+
+## Documentation
+
+**Getting Started:**
+- **[5-Minute Setup Guide](QUICKSTART_MCP.md)** - Quick installation and first use
+- **[MCP Integration Guide](MCP_INTEGRATION.md)** - Complete setup and configuration
+- **[Example Prompts](EXAMPLE_PROMPTS.md)** - 50+ natural language examples
+
+**Advanced Features:**
+- **[Semantic Search Guide](SEMANTIC_SEARCH.md)** - Vector embeddings vs keyword search
+- **[Staleness Detection](STALENESS_DETECTION.md)** - File change tracking and Claude-mem integration
+- **[Compatibility Guide](COMPATIBILITY.md)** - Cross-platform support details
+
+**Development:**
+- **[Developer Guide](.claude/CLAUDE.md)** - Internal architecture and contribution guide
 
 ## License
 

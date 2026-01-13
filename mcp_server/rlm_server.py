@@ -19,6 +19,7 @@ from datetime import datetime
 # Add parent directory to path to import orchestrator
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from src.orchestrator import RLMOrchestrator
+from mcp_server.storage_backend import create_storage_backend, get_backend_info
 
 class MCPServer:
     """MCP Server for RLM analysis with staleness detection"""
@@ -27,6 +28,17 @@ class MCPServer:
         self.orchestrator = RLMOrchestrator()
         self.tools = self._define_tools()
         self.claude_mem_available = self._check_claude_mem()
+
+        # Initialize storage backend (ChromaDB or JSON)
+        self.storage_backend = None  # Created per-repo
+        self.backend_info = get_backend_info()
+
+        # Log backend info
+        if self.backend_info['chromadb_available']:
+            print("✓ ChromaDB available - semantic search enabled", file=sys.stderr)
+        else:
+            print("ℹ ChromaDB not found - using keyword search", file=sys.stderr)
+            print("  Install for better search: pip install chromadb", file=sys.stderr)
 
     def _check_claude_mem(self) -> bool:
         """Check if claude-mem MCP server is available"""
@@ -490,105 +502,40 @@ Note: Automatically warns if data is stale due to file changes.""",
                 "error": str(e)
             }
 
-    def _store_rag_data(self, path: str, query: str, result: Any, focus: str, file_hashes: Dict[str, str]):
-        """Store analysis results as RAG data in repo with file hashes"""
-        # Create .rlm directory in the analyzed path
+    def _get_storage_backend(self, path: str):
+        """Get or create storage backend for given path"""
         base_path = os.path.abspath(path)
         if os.path.isfile(base_path):
             base_path = os.path.dirname(base_path)
 
         rag_dir = os.path.join(base_path, ".rlm")
-        os.makedirs(rag_dir, exist_ok=True)
+        return create_storage_backend(rag_dir)
+
+    def _store_rag_data(self, path: str, query: str, result: Any, focus: str, file_hashes: Dict[str, str]):
+        """Store analysis results using storage backend (ChromaDB or JSON)"""
+        backend = self._get_storage_backend(path)
 
         # Create timestamped entry
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # Store analysis result with file hashes
-        result_file = os.path.join(rag_dir, f"analysis_{timestamp}.json")
-        with open(result_file, 'w') as f:
-            json.dump({
-                "query": query,
-                "focus": focus,
-                "timestamp": timestamp,
-                "result": result if isinstance(result, dict) else {"content": str(result)},
-                "stats": self.orchestrator.stats,
-                "path": path,
-                "file_hashes": file_hashes,  # Track file state
-                "version": "2.0"  # Mark as having hash tracking
-            }, f, indent=2)
-
-        # Update index
-        index_file = os.path.join(rag_dir, "index.json")
-        index = []
-        if os.path.exists(index_file):
-            with open(index_file) as f:
-                index = json.load(f)
-
-        index.append({
-            "timestamp": timestamp,
-            "query": query,
-            "focus": focus,
-            "file": f"analysis_{timestamp}.json",
-            "path": path,
-            "files_tracked": len(file_hashes),
-            "has_hash_tracking": True
-        })
-
-        with open(index_file, 'w') as f:
-            json.dump(index, f, indent=2)
+        # Store using backend
+        backend.store(
+            timestamp=timestamp,
+            query=query,
+            focus=focus,
+            result=result,
+            file_hashes=file_hashes,
+            stats=self.orchestrator.stats,
+            path=path
+        )
 
     def _search_rag_directory(self, rag_dir: str, query: str, max_results: int) -> list:
-        """Search RAG data for relevant past analyses"""
-        results = []
+        """Search RAG data using storage backend (semantic or keyword)"""
+        if not os.path.exists(rag_dir):
+            return []
 
-        index_file = os.path.join(rag_dir, "index.json")
-        if not os.path.exists(index_file):
-            return results
-
-        with open(index_file) as f:
-            index = json.load(f)
-
-        # Simple keyword matching (could be enhanced with embeddings via claude-mem)
-        query_lower = query.lower()
-        query_words = set(query_lower.split())
-
-        scored_results = []
-        for entry in index:
-            entry_query = entry.get("query", "").lower()
-            entry_focus = entry.get("focus", "").lower()
-
-            # Calculate relevance score
-            score = 0
-            if query_lower in entry_query:
-                score += 10
-
-            entry_words = set(entry_query.split())
-            common_words = query_words & entry_words
-            score += len(common_words) * 2
-
-            if query_lower in entry_focus:
-                score += 5
-
-            if score > 0:
-                # Load the actual result
-                result_file = os.path.join(rag_dir, entry["file"])
-                if os.path.exists(result_file):
-                    with open(result_file) as f:
-                        full_data = json.load(f)
-
-                    scored_results.append({
-                        "score": score,
-                        "timestamp": entry["timestamp"],
-                        "query": entry["query"],
-                        "focus": entry["focus"],
-                        "result": full_data.get("result"),
-                        "stats": full_data.get("stats"),
-                        "has_hash_tracking": entry.get("has_hash_tracking", False)
-                    })
-
-        # Sort by score and return top results
-        scored_results.sort(key=lambda x: x["score"], reverse=True)
-        return scored_results[:max_results]
+        backend = create_storage_backend(rag_dir)
+        return backend.search(query, max_results)
 
     async def run_stdio(self):
         """Run MCP server on stdio"""
