@@ -17,6 +17,22 @@ The Claude RLM plugin implements the Recursive Language Models pattern from [Dee
 - 📊 **Cost Tracking**: Real-time monitoring of token usage and costs
 - 🎯 **Smart Delegation**: Intelligent task decomposition and parallel processing
 - 📈 **Proven Patterns**: Library of research-backed analysis strategies
+- 🤖 **MCP Integration**: Auto-triggered by natural language in Claude
+- 💡 **Repo-local RAG**: Persistent analysis stored in `.rlm/` directory
+
+### MCP Integration (Recommended!)
+
+**✨ New!** RLM now works as an MCP server - just ask Claude questions naturally:
+
+```
+"How does authentication work in this repo?"
+"Find security vulnerabilities"
+"What are the main components?"
+```
+
+Claude automatically calls RLM when needed. Results stored in your repo for instant retrieval later!
+
+👉 **[5-Minute Setup Guide](QUICKSTART_MCP.md)** | **[Full MCP Guide](MCP_INTEGRATION.md)** | **[Example Prompts](EXAMPLE_PROMPTS.md)**
 
 ### Benefits
 
@@ -28,27 +44,54 @@ Based on the RLM research paper:
 
 ## Installation
 
-### Prerequisites
+### Method 1: MCP Integration (Recommended)
 
-- Python 3.8 or higher
-- Claude Code CLI (if using as plugin)
+**Best for:** Auto-triggered analysis via natural language
 
-### Standalone Usage
-
-1. Clone the repository:
+1. Clone repository:
 ```bash
 git clone https://github.com/Kukks/claude-rlm.git
 cd claude-rlm
 ```
 
-2. No dependencies required! The orchestrator uses only Python standard library.
+2. Add to Claude Desktop config (`claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "rlm": {
+      "command": "python3",
+      "args": ["/full/path/to/claude-rlm/mcp_server/rlm_server.py"]
+    }
+  }
+}
+```
 
-3. Run analysis:
+3. Restart Claude Desktop
+
+4. Just ask questions naturally - RLM auto-triggers!
+
+👉 **[Full MCP Setup Guide](MCP_INTEGRATION.md)**
+
+### Method 2: Standalone CLI
+
+**Best for:** Direct command-line usage
+
+1. Clone repository:
+```bash
+git clone https://github.com/Kukks/claude-rlm.git
+cd claude-rlm
+```
+
+2. Run analysis:
 ```bash
 python src/orchestrator.py path/to/document "Your analysis query"
 ```
 
-### As Claude Code Plugin
+No dependencies required!
+
+### Method 3: Claude Code Plugin
+
+**Best for:** Claude Code CLI users
 
 1. Install via Claude Code:
 ```bash
@@ -63,7 +106,31 @@ python src/orchestrator.py path/to/document "Your analysis query"
 
 ## Quick Start
 
-### Basic Analysis
+### With MCP Integration
+
+Just ask Claude naturally:
+
+```
+You: "How does authentication work in this repo?"
+
+Claude: [Automatically calls rlm_analyze]
+        [RLM analyzes codebase]
+        [Results stored in .rlm/]
+
+        "The authentication system uses JWT tokens with..."
+```
+
+Later:
+```
+You: "What did you find about authentication?"
+
+Claude: [Retrieves from .rlm/ - instant, $0 cost]
+        "Previously I found that authentication uses..."
+```
+
+**See [Example Prompts](EXAMPLE_PROMPTS.md)** for 50+ natural language triggers!
+
+### Standalone CLI
 
 ```bash
 # Analyze a single file

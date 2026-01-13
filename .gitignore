@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+
+# RLM generated files
+.rlm_state.json
+.rlm_cache/
+analysis/
+
+# Repo-local RAG storage (each repo has its own)
+.rlm/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+test_output/
+*.log

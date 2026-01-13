@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "rlm": {
+      "command": "python3",
+      "args": [
+        "/absolute/path/to/claude-rlm/mcp_server/rlm_server.py"
+      ],
+      "env": {},
+      "description": "Recursive Language Models - Analyze code and documents beyond context limits"
+    }
+  }
+}
