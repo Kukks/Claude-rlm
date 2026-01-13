@@ -1,0 +1,7 @@
+# Optional dependencies for enhanced functionality
+
+# Vector database for semantic RAG search (Recommended)
+chromadb>=0.4.0
+
+# Alternative: Lighter weight vector search
+# sentence-transformers>=2.0.0
