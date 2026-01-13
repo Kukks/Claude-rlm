@@ -26,11 +26,7 @@ type OrchestratorConfig struct {
 
 // StorageConfig holds storage settings
 type StorageConfig struct {
-	QdrantAddress  string `mapstructure:"qdrant_address"`
-	QdrantEnabled  bool   `mapstructure:"qdrant_enabled"`
-	CollectionName string `mapstructure:"collection_name"`
-	JSONFallback   bool   `mapstructure:"json_fallback"`
-	RAGDir         string `mapstructure:"rag_dir"`
+	RAGDir string `mapstructure:"rag_dir"`
 }
 
 // UpdaterConfig holds auto-updater settings
@@ -56,11 +52,7 @@ func DefaultConfig() *Config {
 			CacheTTLHours:     24,
 		},
 		Storage: StorageConfig{
-			QdrantAddress:  "localhost:6334",
-			QdrantEnabled:  true,
-			CollectionName: "rlm_analyses",
-			JSONFallback:   true,
-			RAGDir:         ".rlm",
+			RAGDir: ".rlm",
 		},
 		Updater: UpdaterConfig{
 			Enabled:       true,

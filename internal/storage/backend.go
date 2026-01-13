@@ -26,43 +26,24 @@ type Backend interface {
 
 // Config holds storage configuration
 type Config struct {
-	RAGDir         string
-	QdrantAddress  string
-	QdrantEnabled  bool
-	CollectionName string
+	RAGDir string
 }
 
 // DefaultConfig returns default storage configuration
 func DefaultConfig(ragDir string) *Config {
 	return &Config{
-		RAGDir:         ragDir,
-		QdrantAddress:  "localhost:6334",
-		QdrantEnabled:  true,
-		CollectionName: "rlm_analyses",
+		RAGDir: ragDir,
 	}
 }
 
-// NewBackend creates a storage backend with automatic fallback
+// NewBackend creates a storage backend
 func NewBackend(ctx context.Context, config *Config) (Backend, error) {
-	// Try Qdrant if enabled
-	if config.QdrantEnabled {
-		backend, err := NewQdrantBackend(ctx, config)
-		if err != nil {
-			// Log warning and fall back to JSON
-			fmt.Fprintf(os.Stderr, "Warning: Qdrant unavailable (%v), using JSON backend\n", err)
-		} else {
-			fmt.Fprintf(os.Stderr, "Using Qdrant backend with Ollama embeddings (semantic search)\n")
-			return backend, nil
-		}
+	// Use BM25 backend (pure Go, zero external dependencies)
+	backend, err := NewBM25Backend(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize BM25 backend: %w", err)
 	}
 
-	// Use JSON backend
-	fmt.Fprintf(os.Stderr, "Using JSON backend (keyword search)\n")
-	return NewJSONBackend(config)
-}
-
-// isQdrantAvailable checks if Qdrant is accessible (deprecated)
-func isQdrantAvailable(ctx context.Context, address string) bool {
-	// This function is now deprecated - availability is checked in NewQdrantBackend
-	return true
+	fmt.Fprintf(os.Stderr, "Using BM25 backend (pure Go search, zero dependencies)\n")
+	return backend, nil
 }

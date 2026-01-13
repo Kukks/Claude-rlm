@@ -138,10 +138,7 @@ func runMCPServer() error {
 
 	// Create storage backend
 	storageConfig := &storage.Config{
-		RAGDir:         cfg.Storage.RAGDir,
-		QdrantAddress:  cfg.Storage.QdrantAddress,
-		QdrantEnabled:  cfg.Storage.QdrantEnabled,
-		CollectionName: cfg.Storage.CollectionName,
+		RAGDir: cfg.Storage.RAGDir,
 	}
 
 	backend, err := storage.NewBackend(ctx, storageConfig)
@@ -269,8 +266,8 @@ func showStatus() {
 	fmt.Println("Configuration:")
 	fmt.Printf("  Max Recursion Depth: %d\n", cfg.Orchestrator.MaxRecursionDepth)
 	fmt.Printf("  Cache Enabled: %v\n", cfg.Orchestrator.CacheEnabled)
-	fmt.Printf("  Qdrant Enabled: %v\n", cfg.Storage.QdrantEnabled)
-	fmt.Printf("  Qdrant Address: %s\n", cfg.Storage.QdrantAddress)
+	fmt.Printf("  Storage Backend: BM25 (pure Go)\n")
+	fmt.Printf("  RAG Directory: %s\n", cfg.Storage.RAGDir)
 }
 
 func checkForUpdates(ctx context.Context, logger zerolog.Logger) {

@@ -22,8 +22,8 @@ The Claude RLM plugin implements the Recursive Language Models pattern from [Dee
 - 🤖 **MCP Integration**: Auto-triggered by natural language in Claude
 - 💡 **Repo-local RAG**: Persistent analysis stored in `.rlm/` directory
 - 🔍 **Staleness Detection**: Tracks file changes with SHA256 hashing (v3.0)
-- 🔎 **Semantic Search**: Qdrant integration for meaning-based search (v3.0)
-- 📦 **Single Binary**: No dependencies, works on Windows/Mac/Linux (v3.0)
+- 🔎 **BM25 Search**: Pure Go search algorithm, zero external dependencies (v3.0)
+- 📦 **Single Binary**: Truly standalone, works offline on Windows/Mac/Linux (v3.0)
 
 ### MCP Integration (Recommended!)
 
@@ -66,25 +66,6 @@ sudo mv rlm /usr/local/bin/
 Invoke-WebRequest -Uri "https://github.com/Kukks/claude-rlm/releases/latest/download/claude-rlm_windows_amd64.zip" -OutFile "rlm.zip"
 Expand-Archive rlm.zip -DestinationPath .
 ```
-
-**Install Qdrant + Ollama (Optional but Recommended for Semantic Search):**
-
-For semantic search capabilities, you need both Qdrant (vector database) and Ollama (embedding generation):
-
-```bash
-# 1. Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh
-
-# 2. Pull the embedding model (384-dim all-MiniLM-L6-v2)
-ollama pull all-minilm:l6-v2
-
-# 3. Start Qdrant (Docker - easiest)
-docker run -d -p 6334:6334 -v $(pwd)/qdrant_data:/qdrant/storage qdrant/qdrant:latest
-
-# Or download Qdrant binary from: https://github.com/qdrant/qdrant/releases
-```
-
-**Note**: Without Ollama, RLM will automatically fall back to JSON backend with keyword search.
 
 **Verify Installation:**
 
@@ -583,10 +564,10 @@ MIT License - See [LICENSE](LICENSE) file for details.
 
 **✅ Production Ready (v3.0)**
 
-- **Single Binary**: Go rewrite - no runtime dependencies
+- **Single Binary**: Pure Go - zero runtime dependencies
 - **MCP Integration**: Fully functional with Claude Desktop and Claude Code CLI
-- **Semantic Search**: Qdrant + Ollama embeddings (all-minilm:l6-v2, 384-dim)
-- **Keyword Search**: JSON backend fallback (no external dependencies)
+- **BM25 Search**: Industry-standard search algorithm (used by Elasticsearch)
+- **Offline Operation**: Works completely offline, no external services needed
 - **Staleness Detection**: SHA256-based file change tracking
 - **Cross-Platform**: Linux, macOS, Windows (amd64 + arm64)
 - **State Persistence**: Resume capability with .rlm_state.json
@@ -596,4 +577,5 @@ MIT License - See [LICENSE](LICENSE) file for details.
 **Usage:** Recommended via MCP server (see [QUICKSTART_MCP.md](QUICKSTART_MCP.md))
 
 **Testing:** All tests passing ✅ (4/4 orchestrator tests)
+**Binary Size:** ~10MB (truly standalone)
 
