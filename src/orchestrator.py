@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 RLM Orchestrator - Trampoline-based recursive document analysis
 
