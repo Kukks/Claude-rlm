@@ -51,27 +51,33 @@ Based on the RLM research paper:
 
 ### 🚀 Quick Install (Recommended)
 
-**Download the latest release for your platform:**
+**Download and run the auto-installer:**
 
 ```bash
 # Linux (amd64)
 curl -L https://github.com/Kukks/claude-rlm/releases/latest/download/claude-rlm_linux_amd64.tar.gz | tar xz
-sudo mv rlm /usr/local/bin/
+./rlm install
 
 # macOS (Apple Silicon)
 curl -L https://github.com/Kukks/claude-rlm/releases/latest/download/claude-rlm_darwin_arm64.tar.gz | tar xz
-sudo mv rlm /usr/local/bin/
+./rlm install
 
 # Windows (PowerShell)
 Invoke-WebRequest -Uri "https://github.com/Kukks/claude-rlm/releases/latest/download/claude-rlm_windows_amd64.zip" -OutFile "rlm.zip"
 Expand-Archive rlm.zip -DestinationPath .
+.\rlm.exe install
 ```
+
+The `rlm install` command will:
+- Install the binary to your PATH
+- Auto-detect and configure Claude Desktop (if installed)
+- Auto-detect and configure Claude Code CLI (if installed)
 
 **Verify Installation:**
 
 ```bash
 rlm --version
-# Should show: rlm version v3.0.0
+# Should show: rlm version v3.0.x
 ```
 
 ### Manual Installation

@@ -2,8 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/kukks/claude-rlm/internal/config"
 	"github.com/kukks/claude-rlm/internal/mcp"
@@ -16,7 +21,7 @@ import (
 )
 
 var (
-	Version   = "3.0.1"
+	Version   = "3.0.2"
 	BuildTime = "unknown"
 	GitCommit = "unknown"
 )
@@ -83,8 +88,26 @@ var statusCmd = &cobra.Command{
 	},
 }
 
+var installCmd = &cobra.Command{
+	Use:   "install",
+	Short: "Install RLM and configure Claude",
+	Long: `Install RLM binary to PATH and automatically configure Claude Desktop
+and Claude Code CLI to use RLM as an MCP server.
+
+This command will:
+1. Copy the rlm binary to a directory in your PATH
+2. Detect Claude Desktop configuration and add RLM
+3. Detect Claude Code CLI configuration and add RLM`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if err := runInstall(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	},
+}
+
 func init() {
-	rootCmd.AddCommand(mcpCmd, analyzeCmd, updateCmd, statusCmd)
+	rootCmd.AddCommand(mcpCmd, analyzeCmd, updateCmd, statusCmd, installCmd)
 }
 
 func setupLogger(cfg *config.Config) zerolog.Logger {
@@ -282,4 +305,289 @@ func checkForUpdates(ctx context.Context, logger zerolog.Logger) {
 	if hasUpdate {
 		fmt.Fprintf(os.Stderr, "\n✨ Update available: %s\nRun 'rlm update' to install\n\n", *release.TagName)
 	}
+}
+
+// runInstall handles the install command
+func runInstall() error {
+	fmt.Println("RLM Installer")
+	fmt.Println("=============")
+	fmt.Println()
+
+	// Step 1: Install binary to PATH
+	binaryPath, err := installBinary()
+	if err != nil {
+		return fmt.Errorf("failed to install binary: %w", err)
+	}
+	fmt.Printf("✓ Binary installed to: %s\n", binaryPath)
+
+	// Step 2: Configure Claude Desktop
+	desktopConfigured, err := configureClaudeDesktop(binaryPath)
+	if err != nil {
+		fmt.Printf("⚠ Claude Desktop configuration failed: %v\n", err)
+	} else if desktopConfigured {
+		fmt.Println("✓ Claude Desktop configured")
+	} else {
+		fmt.Println("- Claude Desktop not found (skipped)")
+	}
+
+	// Step 3: Configure Claude Code CLI
+	codeConfigured, err := configureClaudeCode(binaryPath)
+	if err != nil {
+		fmt.Printf("⚠ Claude Code configuration failed: %v\n", err)
+	} else if codeConfigured {
+		fmt.Println("✓ Claude Code CLI configured")
+	} else {
+		fmt.Println("- Claude Code CLI not found (skipped)")
+	}
+
+	fmt.Println()
+	fmt.Println("Installation complete!")
+	if desktopConfigured {
+		fmt.Println("  • Restart Claude Desktop to use RLM")
+	}
+	if codeConfigured {
+		fmt.Println("  • Restart your terminal to use RLM with Claude Code")
+	}
+	fmt.Println()
+	fmt.Println("Test with: rlm status")
+
+	return nil
+}
+
+// installBinary copies the current binary to a directory in PATH
+func installBinary() (string, error) {
+	// Get current executable path
+	exe, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("failed to get executable path: %w", err)
+	}
+
+	// Determine target directory based on OS
+	var targetDir string
+	var targetName string
+
+	switch runtime.GOOS {
+	case "windows":
+		// Use %LOCALAPPDATA%\Programs\rlm or %USERPROFILE%\bin
+		localAppData := os.Getenv("LOCALAPPDATA")
+		if localAppData != "" {
+			targetDir = filepath.Join(localAppData, "Programs", "rlm")
+		} else {
+			home, _ := os.UserHomeDir()
+			targetDir = filepath.Join(home, "bin")
+		}
+		targetName = "rlm.exe"
+	case "darwin", "linux":
+		// Try /usr/local/bin first, fall back to ~/.local/bin
+		if _, err := os.Stat("/usr/local/bin"); err == nil {
+			// Check if we can write to it
+			testFile := "/usr/local/bin/.rlm_test"
+			if f, err := os.Create(testFile); err == nil {
+				f.Close()
+				os.Remove(testFile)
+				targetDir = "/usr/local/bin"
+			}
+		}
+		if targetDir == "" {
+			home, _ := os.UserHomeDir()
+			targetDir = filepath.Join(home, ".local", "bin")
+		}
+		targetName = "rlm"
+	default:
+		return "", fmt.Errorf("unsupported OS: %s", runtime.GOOS)
+	}
+
+	// Create target directory if needed
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create directory %s: %w", targetDir, err)
+	}
+
+	targetPath := filepath.Join(targetDir, targetName)
+
+	// Check if source and target are the same
+	if exe == targetPath {
+		return targetPath, nil
+	}
+
+	// Copy binary
+	src, err := os.Open(exe)
+	if err != nil {
+		return "", fmt.Errorf("failed to open source: %w", err)
+	}
+	defer src.Close()
+
+	dst, err := os.OpenFile(targetPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		return "", fmt.Errorf("failed to create target: %w", err)
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, src); err != nil {
+		return "", fmt.Errorf("failed to copy binary: %w", err)
+	}
+
+	// On Windows, add to PATH if needed
+	if runtime.GOOS == "windows" {
+		addToWindowsPath(targetDir)
+	}
+
+	return targetPath, nil
+}
+
+// addToWindowsPath adds a directory to the user's PATH on Windows
+func addToWindowsPath(dir string) {
+	// Get current user PATH
+	path := os.Getenv("PATH")
+	if strings.Contains(strings.ToLower(path), strings.ToLower(dir)) {
+		return // Already in PATH
+	}
+
+	fmt.Printf("\nNote: Add this directory to your PATH: %s\n", dir)
+	fmt.Println("You can do this by running (in PowerShell as Admin):")
+	fmt.Printf("  [Environment]::SetEnvironmentVariable('PATH', $env:PATH + ';%s', 'User')\n", dir)
+}
+
+// configureClaudeDesktop adds RLM to Claude Desktop configuration
+func configureClaudeDesktop(binaryPath string) (bool, error) {
+	configPath := getClaudeDesktopConfigPath()
+	if configPath == "" {
+		return false, nil
+	}
+
+	// Check if config directory exists
+	configDir := filepath.Dir(configPath)
+	if _, err := os.Stat(configDir); os.IsNotExist(err) {
+		return false, nil // Claude Desktop not installed
+	}
+
+	return addMCPServerToConfig(configPath, binaryPath)
+}
+
+// configureClaudeCode adds RLM to Claude Code CLI configuration
+func configureClaudeCode(binaryPath string) (bool, error) {
+	configPath := getClaudeCodeConfigPath()
+	if configPath == "" {
+		return false, nil
+	}
+
+	// Check if config directory exists
+	configDir := filepath.Dir(configPath)
+	if _, err := os.Stat(configDir); os.IsNotExist(err) {
+		// Try to detect if Claude Code is installed by checking for the binary
+		if !isClaudeCodeInstalled() {
+			return false, nil
+		}
+		// Create config directory
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			return false, err
+		}
+	}
+
+	return addMCPServerToConfig(configPath, binaryPath)
+}
+
+// getClaudeDesktopConfigPath returns the Claude Desktop config path for the current OS
+func getClaudeDesktopConfigPath() string {
+	switch runtime.GOOS {
+	case "darwin":
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json")
+	case "windows":
+		appData := os.Getenv("APPDATA")
+		if appData != "" {
+			return filepath.Join(appData, "Claude", "claude_desktop_config.json")
+		}
+	case "linux":
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, ".config", "Claude", "claude_desktop_config.json")
+	}
+	return ""
+}
+
+// getClaudeCodeConfigPath returns the Claude Code CLI config path for the current OS
+func getClaudeCodeConfigPath() string {
+	home, _ := os.UserHomeDir()
+	switch runtime.GOOS {
+	case "darwin", "linux":
+		return filepath.Join(home, ".claude", "settings.json")
+	case "windows":
+		return filepath.Join(home, ".claude", "settings.json")
+	}
+	return ""
+}
+
+// isClaudeCodeInstalled checks if Claude Code CLI is installed
+func isClaudeCodeInstalled() bool {
+	// Check common locations
+	paths := []string{"claude", "claude.exe"}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+
+	// Check in PATH
+	pathEnv := os.Getenv("PATH")
+	var separator string
+	if runtime.GOOS == "windows" {
+		separator = ";"
+	} else {
+		separator = ":"
+	}
+
+	for _, dir := range strings.Split(pathEnv, separator) {
+		claudePath := filepath.Join(dir, "claude")
+		if runtime.GOOS == "windows" {
+			claudePath += ".exe"
+		}
+		if _, err := os.Stat(claudePath); err == nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+// addMCPServerToConfig adds or updates the RLM MCP server in a config file
+func addMCPServerToConfig(configPath, binaryPath string) (bool, error) {
+	// Read existing config or create new one
+	var config map[string]interface{}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			config = make(map[string]interface{})
+		} else {
+			return false, err
+		}
+	} else {
+		if err := json.Unmarshal(data, &config); err != nil {
+			return false, fmt.Errorf("failed to parse config: %w", err)
+		}
+	}
+
+	// Get or create mcpServers section
+	mcpServers, ok := config["mcpServers"].(map[string]interface{})
+	if !ok {
+		mcpServers = make(map[string]interface{})
+		config["mcpServers"] = mcpServers
+	}
+
+	// Add RLM server
+	mcpServers["rlm"] = map[string]interface{}{
+		"command": binaryPath,
+		"args":    []string{"mcp"},
+	}
+
+	// Write config back
+	newData, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return false, err
+	}
+
+	if err := os.WriteFile(configPath, newData, 0644); err != nil {
+		return false, err
+	}
+
+	return true, nil
 }

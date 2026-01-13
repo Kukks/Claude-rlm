@@ -37,3 +37,5 @@ Thumbs.db
 # Testing
 test_output/
 *.log
+tmpclaude-*
+rlm.exe
