@@ -3,11 +3,13 @@
 > Recursive Language Models for Claude Code - Analyze documents beyond context window limits
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Go 1.23+](https://img.shields.io/badge/go-1.23+-blue.svg)](https://golang.org/dl/)
 
 ## Overview
 
 The Claude RLM plugin implements the Recursive Language Models pattern from [DeepMind/MIT research](https://arxiv.org/abs/2512.24601), enabling analysis of documents that exceed context window limits through intelligent decomposition and trampoline-based recursion.
+
+**New in v3.0:** Complete rewrite in Go - single binary, no runtime dependencies, faster performance!
 
 ### Key Features
 
@@ -19,8 +21,9 @@ The Claude RLM plugin implements the Recursive Language Models pattern from [Dee
 - 📈 **Proven Patterns**: Library of research-backed analysis strategies
 - 🤖 **MCP Integration**: Auto-triggered by natural language in Claude
 - 💡 **Repo-local RAG**: Persistent analysis stored in `.rlm/` directory
-- 🔍 **Staleness Detection**: Tracks file changes, warns when cache is outdated (v2.0)
-- 🔌 **Claude-mem Support**: Optional integration for cross-project learning (v2.0)
+- 🔍 **Staleness Detection**: Tracks file changes with SHA256 hashing (v3.0)
+- 🔎 **Semantic Search**: Qdrant integration for meaning-based search (v3.0)
+- 📦 **Single Binary**: No dependencies, works on Windows/Mac/Linux (v3.0)
 
 ### MCP Integration (Recommended!)
 
@@ -46,60 +49,58 @@ Based on the RLM research paper:
 
 ## Installation
 
-### 🚀 Auto-Installer (Recommended)
+### 🚀 Quick Install (Recommended)
 
-**Detects your environment and provides tailored instructions!**
+**Download the latest release for your platform:**
 
 ```bash
-git clone https://github.com/Kukks/claude-rlm.git
-cd claude-rlm
+# Linux (amd64)
+curl -L https://github.com/Kukks/claude-rlm/releases/latest/download/claude-rlm_linux_amd64.tar.gz | tar xz
+sudo mv rlm /usr/local/bin/
 
-# Optional: Install semantic search (Recommended!)
-pip install chromadb
+# macOS (Apple Silicon)
+curl -L https://github.com/Kukks/claude-rlm/releases/latest/download/claude-rlm_darwin_arm64.tar.gz | tar xz
+sudo mv rlm /usr/local/bin/
 
-# Run installer
-python3 install.py
+# Windows (PowerShell)
+Invoke-WebRequest -Uri "https://github.com/Kukks/claude-rlm/releases/latest/download/claude-rlm_windows_amd64.zip" -OutFile "rlm.zip"
+Expand-Archive rlm.zip -DestinationPath .
 ```
 
-The installer will:
-- ✅ Detect your OS (Windows/Mac/Linux)
-- ✅ Find **Claude Desktop** or **Claude Code CLI**
-- ✅ Check for ChromaDB (semantic search)
-- ✅ Generate correct config with absolute paths
-- ✅ Provide step-by-step instructions for your setup
+**Install Qdrant (Optional but Recommended for Semantic Search):**
 
-**Supports:**
-- **Claude Desktop** - GUI app on Windows/macOS/Linux
-- **Claude Code CLI** - Terminal-based on all platforms
+```bash
+# Docker (easiest)
+docker run -d -p 6334:6334 -v $(pwd)/qdrant_data:/qdrant/storage qdrant/qdrant:latest
 
-**Optional Dependencies:**
-- **ChromaDB** - Semantic search (finds "login bugs" when you search "auth issues")
-  - Install: `pip install chromadb`
-  - Without it: Falls back to keyword search
-  - Recommended for best search quality!
+# Or download binary from: https://github.com/qdrant/qdrant/releases
+```
+
+**Verify Installation:**
+
+```bash
+rlm --version
+# Should show: rlm version v3.0.0
+```
 
 ### Manual Installation
 
 **Claude Desktop:**
 
-1. Clone repository:
-```bash
-git clone https://github.com/Kukks/claude-rlm.git
-cd claude-rlm
-```
+1. Install RLM binary (see above)
 
 2. Find your config file:
    - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
    - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
    - **Linux**: `~/.config/Claude/claude_desktop_config.json`
 
-3. Add this config (replace path!):
+3. Add this config:
 ```json
 {
   "mcpServers": {
     "rlm": {
-      "command": "python3",
-      "args": ["/full/path/to/claude-rlm/mcp_server/rlm_server.py"]
+      "command": "/usr/local/bin/rlm",
+      "args": ["mcp"]
     }
   }
 }
@@ -109,27 +110,45 @@ cd claude-rlm
 
 **Claude Code CLI:**
 
-1. Clone repository (same as above)
+1. Install RLM binary (see above)
 
-2. Find your config: `~/.config/claude/config.json` (or `%APPDATA%\claude\config.json` on Windows)
+2. Edit `~/.config/claude/config.json`:
+```json
+{
+  "mcpServers": {
+    "rlm": {
+      "command": "/usr/local/bin/rlm",
+      "args": ["mcp"]
+    }
+  }
+}
+```
 
-3. Add to `mcpServers` section (same config as above)
+3. Restart your terminal
 
-4. Restart terminal
+### Build from Source
 
-5. Verify: `claude mcp list` (should show 'rlm')
+```bash
+git clone https://github.com/Kukks/claude-rlm.git
+cd claude-rlm
+make build
+sudo cp bin/rlm /usr/local/bin/
+```
+
+**Requirements:**
+- Go 1.23+ (for building)
+- Qdrant (optional, for semantic search)
 
 ### Standalone CLI (No MCP)
 
 **For direct command-line usage without MCP integration:**
 
 ```bash
-git clone https://github.com/Kukks/claude-rlm.git
-cd claude-rlm
-python src/orchestrator.py path/to/document "Your analysis query"
+# After installing binary (see above)
+rlm analyze path/to/document "Your analysis query"
 ```
 
-No dependencies required!
+Single binary, no dependencies!
 
 ## Quick Start
 
@@ -161,41 +180,45 @@ Claude: [Retrieves from .rlm/ - instant, $0 cost]
 
 ```bash
 # Analyze a single file
-python src/orchestrator.py README.md "Summarize the key features"
+rlm analyze README.md "Summarize the key features"
 
 # Analyze a codebase
-python src/orchestrator.py ./src "Find all security vulnerabilities"
+rlm analyze ./src "Find all security vulnerabilities"
 
 # Analyze with specific focus
-python src/orchestrator.py ./docs "What topics are missing from the documentation?"
+rlm analyze ./docs "What topics are missing from the documentation?"
 ```
 
 ### Check Status
 
 ```bash
-python src/orchestrator.py status
+rlm status
 ```
 
 Output:
 ```
-RLM Status: Active
-Current depth: 3/10
-Stack size: 2
-Total subagent calls: 15
-Total cost: $0.38
+RLM Version: v3.0.0
+Build Time: 2026-01-13
+Git Commit: abc1234
+
+Configuration:
+  Max Recursion Depth: 10
+  Cache Enabled: true
+  Qdrant Enabled: true
+  Qdrant Address: localhost:6334
 ```
 
 ### Resume Interrupted Analysis
 
 ```bash
 # Start analysis
-python src/orchestrator.py large_doc.pdf "Deep analysis"
+rlm analyze large_doc.pdf "Deep analysis"
 
 # Interrupt (Ctrl+C)
 ^C
 
 # Resume automatically
-python src/orchestrator.py large_doc.pdf "Deep analysis"
+rlm analyze large_doc.pdf "Deep analysis"
 # Output: 🔄 Resuming from saved state...
 ```
 
@@ -204,7 +227,7 @@ python src/orchestrator.py large_doc.pdf "Deep analysis"
 ### Example 1: Code Security Audit
 
 ```bash
-python src/orchestrator.py ./src "Perform security audit focusing on authentication and authorization"
+rlm analyze ./src "Perform security audit focusing on authentication and authorization"
 ```
 
 The orchestrator will:
@@ -221,7 +244,7 @@ The orchestrator will:
 ### Example 2: Research Paper Analysis
 
 ```bash
-python src/orchestrator.py paper.pdf "Summarize methodology, key findings, and compare to related work"
+rlm analyze paper.pdf "Summarize methodology, key findings, and compare to related work"
 ```
 
 The orchestrator will:
@@ -238,7 +261,7 @@ The orchestrator will:
 ### Example 3: Documentation Gap Analysis
 
 ```bash
-python src/orchestrator.py ./docs "What API endpoints are undocumented? Compare docs to actual codebase"
+rlm analyze ./docs "What API endpoints are undocumented? Compare docs to actual codebase"
 ```
 
 The orchestrator will:
@@ -254,27 +277,40 @@ The orchestrator will:
 
 ## Configuration
 
-Create `~/.claude-rlm/config.json`:
+Create `~/.config/rlm/config.yaml`:
 
-```json
-{
-  "max_recursion_depth": 10,
-  "cache_enabled": true,
-  "cache_ttl_hours": 24,
-  "parallel_branches": 3,
-  "cost_tracking": true
-}
+```yaml
+orchestrator:
+  max_recursion_depth: 10
+  max_iterations: 1000
+  cache_enabled: true
+  cache_ttl_hours: 24
+
+storage:
+  rag_dir: ".rlm"
+  qdrant_enabled: true
+  qdrant_address: "localhost:6334"
+  collection_name: "rlm_analyses"
+
+updater:
+  enabled: true
+  check_interval_hours: 24
+
+logging:
+  level: "info"  # debug, info, warn, error
+  format: "text"  # text or json
 ```
 
 ### Configuration Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `max_recursion_depth` | 10 | Maximum depth for recursive analysis |
-| `cache_enabled` | true | Enable response caching |
-| `cache_ttl_hours` | 24 | Cache lifetime in hours |
-| `parallel_branches` | 3 | Max parallel Worker subagents |
-| `cost_tracking` | true | Track token usage and costs |
+| Section | Option | Default | Description |
+|---------|--------|---------|-------------|
+| orchestrator | `max_recursion_depth` | 10 | Maximum depth for recursive analysis |
+| orchestrator | `cache_enabled` | true | Enable response caching |
+| orchestrator | `cache_ttl_hours` | 24 | Cache lifetime in hours |
+| storage | `qdrant_enabled` | true | Use Qdrant for semantic search |
+| storage | `qdrant_address` | localhost:6334 | Qdrant server address |
+| updater | `enabled` | true | Auto-check for updates |
 
 ## How It Works
 
@@ -404,7 +440,7 @@ Based on document size:
 **Solution**:
 ```bash
 rm .rlm_state.json
-python src/orchestrator.py path/to/doc "query"
+rlm analyze path/to/doc "query"
 ```
 
 ### "High cost warning"
@@ -420,7 +456,7 @@ python src/orchestrator.py path/to/doc "query"
 
 **Check status:**
 ```bash
-python src/orchestrator.py status
+rlm analyze status
 ```
 
 If depth is unusually high (>7), the query may be too complex. Interrupt and narrow the scope.
@@ -497,7 +533,7 @@ cd claude-rlm
 python -m pytest tests/
 
 # Test orchestrator
-python src/orchestrator.py test.txt "test query"
+rlm analyze test.txt "test query"
 ```
 
 ## Documentation
@@ -535,16 +571,18 @@ MIT License - See [LICENSE](LICENSE) file for details.
 
 ## Status
 
-**✅ Production Ready (v2.0)**
+**✅ Production Ready (v3.0)**
 
-- **MCP Integration**: Fully functional with Claude Desktop
-- **Staleness Detection**: File change tracking operational
-- **Claude-mem Support**: Optional integration working
-- **Cross-Platform**: Tested on Windows, macOS, Linux
-- **State Persistence**: Resume capability implemented
-- **Response Caching**: Cost optimization active
+- **Single Binary**: Go rewrite - no runtime dependencies
+- **MCP Integration**: Fully functional with Claude Desktop and Claude Code CLI
+- **Qdrant Integration**: Semantic search with automatic fallback to JSON
+- **Staleness Detection**: SHA256-based file change tracking
+- **Cross-Platform**: Linux, macOS, Windows (amd64 + arm64)
+- **State Persistence**: Resume capability with .rlm_state.json
+- **Response Caching**: Cost optimization with 24h TTL
+- **Auto-Updater**: Check for updates via GitHub releases
 
 **Usage:** Recommended via MCP server (see [QUICKSTART_MCP.md](QUICKSTART_MCP.md))
 
-**Testing:** All 4 MCP tests passing ✅
+**Testing:** All MCP tools operational ✅
 
