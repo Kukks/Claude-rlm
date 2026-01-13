@@ -23,8 +23,9 @@ jobs:
         id: version
         run: |
           # Get the version line from current and previous commit
-          CURRENT=$(git show HEAD:cmd/rlm/main.go | grep -E '^var Version' || echo "")
-          PREVIOUS=$(git show HEAD^:cmd/rlm/main.go 2>/dev/null | grep -E '^var Version' || echo "")
+          # Match both "var Version = " and "	Version = " (inside var block)
+          CURRENT=$(git show HEAD:cmd/rlm/main.go | grep -E '^\s*(var\s+)?Version\s*=' || echo "")
+          PREVIOUS=$(git show HEAD^:cmd/rlm/main.go 2>/dev/null | grep -E '^\s*(var\s+)?Version\s*=' || echo "")
 
           echo "Current version line: $CURRENT"
           echo "Previous version line: $PREVIOUS"
@@ -32,7 +33,7 @@ jobs:
           if [ "$CURRENT" != "$PREVIOUS" ] && [ -n "$CURRENT" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
 
-            # Extract version from: var Version = "x.y.z"
+            # Extract version from: var Version = "x.y.z" or Version = "x.y.z"
             VERSION=$(echo "$CURRENT" | sed -E 's/.*"(.+)".*/\1/')
             echo "Extracted version: $VERSION"
 
