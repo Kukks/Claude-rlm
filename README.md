@@ -46,9 +46,29 @@ Based on the RLM research paper:
 
 ## Installation
 
-### Method 1: MCP Integration (Recommended)
+### 🚀 Auto-Installer (Recommended)
 
-**Best for:** Auto-triggered analysis via natural language
+**Detects your environment and provides tailored instructions!**
+
+```bash
+git clone https://github.com/Kukks/claude-rlm.git
+cd claude-rlm
+python3 install.py
+```
+
+The installer will:
+- ✅ Detect your OS (Windows/Mac/Linux)
+- ✅ Find **Claude Desktop** or **Claude Code CLI**
+- ✅ Generate correct config with absolute paths
+- ✅ Provide step-by-step instructions for your setup
+
+**Supports:**
+- **Claude Desktop** - GUI app on Windows/macOS/Linux
+- **Claude Code CLI** - Terminal-based on all platforms
+
+### Manual Installation
+
+**Claude Desktop:**
 
 1. Clone repository:
 ```bash
@@ -56,7 +76,12 @@ git clone https://github.com/Kukks/claude-rlm.git
 cd claude-rlm
 ```
 
-2. Add to Claude Desktop config (`claude_desktop_config.json`):
+2. Find your config file:
+   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+   - **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+3. Add this config (replace path!):
 ```json
 {
   "mcpServers": {
@@ -68,43 +93,31 @@ cd claude-rlm
 }
 ```
 
-3. Restart Claude Desktop
+4. Restart Claude Desktop
 
-4. Just ask questions naturally - RLM auto-triggers!
+**Claude Code CLI:**
 
-👉 **[Full MCP Setup Guide](MCP_INTEGRATION.md)**
+1. Clone repository (same as above)
 
-### Method 2: Standalone CLI
+2. Find your config: `~/.config/claude/config.json` (or `%APPDATA%\claude\config.json` on Windows)
 
-**Best for:** Direct command-line usage
+3. Add to `mcpServers` section (same config as above)
 
-1. Clone repository:
+4. Restart terminal
+
+5. Verify: `claude mcp list` (should show 'rlm')
+
+### Standalone CLI (No MCP)
+
+**For direct command-line usage without MCP integration:**
+
 ```bash
 git clone https://github.com/Kukks/claude-rlm.git
 cd claude-rlm
-```
-
-2. Run analysis:
-```bash
 python src/orchestrator.py path/to/document "Your analysis query"
 ```
 
 No dependencies required!
-
-### Method 3: Claude Code Plugin
-
-**Best for:** Claude Code CLI users
-
-1. Install via Claude Code:
-```bash
-/plugin install claude-rlm
-```
-
-2. Use commands:
-```bash
-/rlm:analyze path/to/document "Your query"
-/rlm:status
-```
 
 ## Quick Start
 
