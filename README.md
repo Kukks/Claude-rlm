@@ -67,14 +67,24 @@ Invoke-WebRequest -Uri "https://github.com/Kukks/claude-rlm/releases/latest/down
 Expand-Archive rlm.zip -DestinationPath .
 ```
 
-**Install Qdrant (Optional but Recommended for Semantic Search):**
+**Install Qdrant + Ollama (Optional but Recommended for Semantic Search):**
+
+For semantic search capabilities, you need both Qdrant (vector database) and Ollama (embedding generation):
 
 ```bash
-# Docker (easiest)
+# 1. Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# 2. Pull the embedding model (384-dim all-MiniLM-L6-v2)
+ollama pull all-minilm:l6-v2
+
+# 3. Start Qdrant (Docker - easiest)
 docker run -d -p 6334:6334 -v $(pwd)/qdrant_data:/qdrant/storage qdrant/qdrant:latest
 
-# Or download binary from: https://github.com/qdrant/qdrant/releases
+# Or download Qdrant binary from: https://github.com/qdrant/qdrant/releases
 ```
+
+**Note**: Without Ollama, RLM will automatically fall back to JSON backend with keyword search.
 
 **Verify Installation:**
 
@@ -575,7 +585,8 @@ MIT License - See [LICENSE](LICENSE) file for details.
 
 - **Single Binary**: Go rewrite - no runtime dependencies
 - **MCP Integration**: Fully functional with Claude Desktop and Claude Code CLI
-- **Qdrant Integration**: Semantic search with automatic fallback to JSON
+- **Semantic Search**: Qdrant + Ollama embeddings (all-minilm:l6-v2, 384-dim)
+- **Keyword Search**: JSON backend fallback (no external dependencies)
 - **Staleness Detection**: SHA256-based file change tracking
 - **Cross-Platform**: Linux, macOS, Windows (amd64 + arm64)
 - **State Persistence**: Resume capability with .rlm_state.json
@@ -584,5 +595,5 @@ MIT License - See [LICENSE](LICENSE) file for details.
 
 **Usage:** Recommended via MCP server (see [QUICKSTART_MCP.md](QUICKSTART_MCP.md))
 
-**Testing:** All MCP tools operational ✅
+**Testing:** All tests passing ✅ (4/4 orchestrator tests)
 
