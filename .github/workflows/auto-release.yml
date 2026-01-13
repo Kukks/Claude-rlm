@@ -110,7 +110,16 @@ jobs:
           # Push tag
           git push origin "$VERSION"
 
+          # Clean up release_notes.md to avoid dirty state for GoReleaser
+          rm -f release_notes.md
+
           echo "✅ Created and pushed tag: $VERSION"
+
+      - name: Checkout tag for clean release
+        if: steps.version.outputs.changed == 'true' && steps.tag_check.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git checkout "$VERSION"
 
       - name: Setup Go
         if: steps.version.outputs.changed == 'true' && steps.tag_check.outputs.exists == 'false'
