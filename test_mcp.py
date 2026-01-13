@@ -49,11 +49,13 @@ def test_rag_storage():
     os.makedirs(test_dir, exist_ok=True)
 
     # Test storage
+    file_hashes = {"test.txt": "abc123"}
     server._store_rag_data(
         path=test_dir,
         query="Test query",
         result={"content": "Test result"},
-        focus="testing"
+        focus="testing",
+        file_hashes=file_hashes
     )
 
     # Check files created
@@ -92,18 +94,21 @@ def test_rag_search():
     os.makedirs(test_dir, exist_ok=True)
 
     # Store some test data
+    file_hashes = {"test.py": "def123"}
     server._store_rag_data(
         path=test_dir,
         query="Find security vulnerabilities",
         result={"content": "Found 3 SQL injection risks"},
-        focus="security"
+        focus="security",
+        file_hashes=file_hashes
     )
 
     server._store_rag_data(
         path=test_dir,
         query="Analyze performance",
         result={"content": "Database queries are slow"},
-        focus="performance"
+        focus="performance",
+        file_hashes=file_hashes
     )
 
     # Search for security-related items
