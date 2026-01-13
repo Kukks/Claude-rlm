@@ -6,10 +6,78 @@ import os
 import sys
 import platform
 import json
+import subprocess
+import shutil
 from pathlib import Path
 
+def detect_wsl_installations():
+    """Detect WSL installations (when running on Windows)"""
+    if platform.system() != 'Windows':
+        return []
+
+    wsl_installs = []
+
+    try:
+        # Get list of WSL distributions
+        result = subprocess.run(
+            ['wsl', '--list', '--quiet'],
+            capture_output=True,
+            text=True,
+            encoding='utf-16-le',  # WSL outputs UTF-16-LE
+            timeout=5
+        )
+
+        if result.returncode != 0:
+            return []
+
+        # Parse distributions (filter out empty lines)
+        distros = [line.strip().replace('\x00', '') for line in result.stdout.split('\n') if line.strip()]
+
+        for distro in distros:
+            if not distro:
+                continue
+
+            # Check if Claude Code CLI exists in this WSL distro
+            check_cmd = ['wsl', '-d', distro, '--', 'bash', '-c',
+                        'test -f ~/.config/claude/config.json && echo "exists"']
+
+            try:
+                check_result = subprocess.run(
+                    check_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=3
+                )
+
+                if 'exists' in check_result.stdout:
+                    # Get the Windows path to the WSL config
+                    wsl_path_cmd = ['wsl', '-d', distro, '--', 'bash', '-c',
+                                   'wslpath -w ~/.config/claude/config.json']
+                    path_result = subprocess.run(
+                        wsl_path_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=3
+                    )
+
+                    if path_result.returncode == 0:
+                        win_path = path_result.stdout.strip()
+                        wsl_installs.append({
+                            'distro': distro,
+                            'config_path': win_path,
+                            'linux_path': '~/.config/claude/config.json'
+                        })
+            except (subprocess.TimeoutExpired, Exception):
+                continue
+
+    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+        # WSL not available or error occurred
+        pass
+
+    return wsl_installs
+
 def detect_environment():
-    """Detect OS and Claude installation type"""
+    """Detect OS and Claude installation types (including WSL)"""
     os_type = platform.system()  # 'Windows', 'Darwin', 'Linux'
 
     # Check for Claude Desktop
@@ -29,6 +97,9 @@ def detect_environment():
     has_desktop = claude_desktop_configs.get(os_type, Path()).exists()
     has_code_cli = claude_code_configs.get(os_type, Path()).exists()
 
+    # Detect WSL installations
+    wsl_installations = detect_wsl_installations() if os_type == 'Windows' else []
+
     return {
         'os': os_type,
         'os_name': {'Darwin': 'macOS', 'Windows': 'Windows', 'Linux': 'Linux'}.get(os_type, os_type),
@@ -39,7 +110,8 @@ def detect_environment():
         'claude_code': {
             'installed': has_code_cli,
             'config_path': str(claude_code_configs.get(os_type, ''))
-        }
+        },
+        'wsl_installations': wsl_installations
     }
 
 def get_rlm_path():
@@ -63,6 +135,162 @@ def generate_mcp_config(env):
 
     return config
 
+def print_installation_table(env):
+    """Print a table of all detected installations"""
+    installations = []
+
+    # Claude Desktop
+    if env['claude_desktop']['installed']:
+        installations.append({
+            'name': 'Claude Desktop',
+            'type': 'desktop',
+            'status': '✅ Found',
+            'config': env['claude_desktop']['config_path']
+        })
+
+    # Claude Code CLI (native)
+    if env['claude_code']['installed']:
+        platform_name = env['os_name']
+        installations.append({
+            'name': f'Claude Code ({platform_name})',
+            'type': 'code_cli',
+            'status': '✅ Found',
+            'config': env['claude_code']['config_path']
+        })
+
+    # WSL installations
+    for wsl in env.get('wsl_installations', []):
+        installations.append({
+            'name': f'Claude Code (WSL: {wsl["distro"]})',
+            'type': 'wsl',
+            'status': '✅ Found',
+            'config': wsl['config_path'],
+            'linux_path': wsl['linux_path']
+        })
+
+    if not installations:
+        return None
+
+    print("🔍 Detected Installations:")
+    print()
+    print("┌─" + "─" * 30 + "┬─" + "─" * 10 + "┬─" + "─" * 50 + "┐")
+    print("│ " + "Installation".ljust(30) + "│ " + "Status".ljust(10) + "│ " + "Config Path".ljust(50) + "│")
+    print("├─" + "─" * 30 + "┼─" + "─" * 10 + "┼─" + "─" * 50 + "┤")
+
+    for inst in installations:
+        # Truncate long paths for table display
+        config_display = inst['config']
+        if len(config_display) > 50:
+            config_display = "..." + config_display[-47:]
+
+        print("│ " + inst['name'].ljust(30) + "│ " + inst['status'].ljust(10) + "│ " + config_display.ljust(50) + "│")
+
+    print("└─" + "─" * 30 + "┴─" + "─" * 10 + "┴─" + "─" * 50 + "┘")
+    print()
+
+    return installations
+
+def update_config_file(config_path, mcp_config):
+    """Update a config file with RLM MCP server configuration"""
+    config_path = Path(config_path)
+
+    # Create parent directory if needed
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Read existing config or create new one
+    if config_path.exists():
+        with open(config_path, 'r') as f:
+            try:
+                existing = json.load(f)
+            except json.JSONDecodeError:
+                existing = {}
+    else:
+        existing = {}
+
+    # Add or update mcpServers section
+    if 'mcpServers' not in existing:
+        existing['mcpServers'] = {}
+
+    existing['mcpServers']['rlm'] = mcp_config['mcpServers']['rlm']
+
+    # Write back
+    with open(config_path, 'w') as f:
+        json.dump(existing, f, indent=2)
+
+    return True
+
+def auto_configure(env, installations):
+    """Automatically configure all detected installations"""
+    config = generate_mcp_config(env)
+
+    print("🔧 Auto-Configuration")
+    print("-" * 70)
+    print()
+
+    success_count = 0
+    fail_count = 0
+
+    for inst in installations:
+        name = inst['name']
+        config_path = inst['config']
+
+        try:
+            # For WSL, we need to write using WSL commands
+            if inst['type'] == 'wsl':
+                # Extract distro name
+                distro = inst['name'].split('WSL: ')[1].rstrip(')')
+
+                # Create a simpler approach: write config via Python in WSL
+                rlm_config_json = json.dumps(config['mcpServers']['rlm'])
+
+                # Build command without f-string backslashes
+                bash_script = (
+                    'mkdir -p ~/.config/claude && '
+                    'python3 -c "'
+                    'import json, os; '
+                    'path = os.path.expanduser(\'~/.config/claude/config.json\'); '
+                    'cfg = json.load(open(path)) if os.path.exists(path) else {}; '
+                    'cfg.setdefault(\'mcpServers\', {}); '
+                    'cfg[\'mcpServers\'][\'rlm\'] = ' + rlm_config_json.replace('"', '\\"') + '; '
+                    'json.dump(cfg, open(path, \'w\'), indent=2)'
+                    '"'
+                )
+
+                wsl_cmd = ['wsl', '-d', distro, '--', 'bash', '-c', bash_script]
+                result = subprocess.run(wsl_cmd, capture_output=True, timeout=5)
+
+                if result.returncode == 0:
+                    print(f"  ✅ {name}")
+                    success_count += 1
+                else:
+                    print(f"  ❌ {name} (error writing config)")
+                    fail_count += 1
+            else:
+                # Native Windows/Mac/Linux
+                update_config_file(config_path, config)
+                print(f"  ✅ {name}")
+                success_count += 1
+
+        except Exception as e:
+            print(f"  ❌ {name} ({str(e)[:50]}...)")
+            fail_count += 1
+
+    print()
+    print(f"Results: {success_count} configured, {fail_count} failed")
+    print()
+
+    if success_count > 0:
+        print("✅ Configuration complete!")
+        print()
+        print("Next steps:")
+        if env['claude_desktop']['installed']:
+            print("  • Restart Claude Desktop completely")
+        if env['claude_code']['installed'] or env.get('wsl_installations'):
+            print("  • Restart your terminal/WSL session")
+        print()
+
+    return success_count > 0
+
 def print_instructions(env):
     """Print installation instructions based on environment"""
 
@@ -74,23 +302,10 @@ def print_instructions(env):
     print(f"📍 Detected Environment: {env['os_name']}")
     print()
 
-    rlm_path = get_rlm_path().resolve()
-    config = generate_mcp_config(env)
+    # Print installation table
+    installations = print_installation_table(env)
 
-    # Check what's installed
-    if env['claude_desktop']['installed']:
-        print("✅ Claude Desktop detected")
-        print(f"   Config: {env['claude_desktop']['config_path']}")
-        print()
-        print_desktop_instructions(env, config)
-
-    if env['claude_code']['installed']:
-        print("✅ Claude Code CLI detected")
-        print(f"   Config: {env['claude_code']['config_path']}")
-        print()
-        print_code_cli_instructions(env, config)
-
-    if not env['claude_desktop']['installed'] and not env['claude_code']['installed']:
+    if not installations:
         print("⚠️  No Claude installation detected")
         print()
         print("Please install one of:")
@@ -98,6 +313,43 @@ def print_instructions(env):
         print("  - Claude Code CLI: npm install -g @anthropic-ai/claude-code")
         print()
         print("Then run this script again.")
+        return
+
+    # Offer auto-configuration
+    print("Would you like to auto-configure all detected installations?")
+    print("(This will add RLM MCP server to each config file)")
+    print()
+
+    try:
+        response = input("Configure all? [Y/n]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        response = 'n'
+        print()
+
+    if response in ['', 'y', 'yes']:
+        print()
+        if auto_configure(env, installations):
+            return  # Success, no need for manual instructions
+
+    # Manual instructions fallback
+    print()
+    print("📝 Manual Configuration Instructions:")
+    print("-" * 70)
+    print()
+
+    rlm_path = get_rlm_path().resolve()
+    config = generate_mcp_config(env)
+
+    # Check what's installed
+    if env['claude_desktop']['installed']:
+        print_desktop_instructions(env, config)
+
+    if env['claude_code']['installed']:
+        print_code_cli_instructions(env, config)
+
+    # WSL instructions
+    for wsl in env.get('wsl_installations', []):
+        print_wsl_instructions(env, config, wsl)
 
 def print_desktop_instructions(env, config):
     """Print Claude Desktop installation instructions"""
@@ -158,6 +410,32 @@ def print_code_cli_instructions(env, config):
     print("   # Should show 'rlm' server")
     print()
     print("5. Test it:")
+    print("   cd your-project")
+    print("   claude")
+    print("   > How does authentication work here?")
+    print()
+
+def print_wsl_instructions(env, config, wsl):
+    """Print WSL installation instructions"""
+    print(f"🐧 WSL Installation ({wsl['distro']})")
+    print("-" * 70)
+    print()
+    print("From Windows PowerShell/CMD:")
+    print()
+    print(f"1. Access WSL ({wsl['distro']}):")
+    print(f"   wsl -d {wsl['distro']}")
+    print()
+    print("2. Edit the config file:")
+    print(f"   nano {wsl['linux_path']}")
+    print()
+    print("3. Add this to the 'mcpServers' section:")
+    print()
+    print(json.dumps(config, indent=2))
+    print()
+    print("4. Exit WSL and restart your WSL terminal")
+    print()
+    print("5. Test it from WSL:")
+    print(f"   wsl -d {wsl['distro']}")
     print("   cd your-project")
     print("   claude")
     print("   > How does authentication work here?")
