@@ -1,0 +1,116 @@
+name: Auto Release on Version Change
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'cmd/rlm/main.go'
+
+jobs:
+  detect-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if version changed
+        id: version
+        run: |
+          # Get the version line from current and previous commit
+          CURRENT=$(git show HEAD:cmd/rlm/main.go | grep -E '^var Version' || echo "")
+          PREVIOUS=$(git show HEAD^:cmd/rlm/main.go 2>/dev/null | grep -E '^var Version' || echo "")
+
+          echo "Current version line: $CURRENT"
+          echo "Previous version line: $PREVIOUS"
+
+          if [ "$CURRENT" != "$PREVIOUS" ] && [ -n "$CURRENT" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+
+            # Extract version from: var Version = "x.y.z"
+            VERSION=$(echo "$CURRENT" | sed -E 's/.*"(.+)".*/\1/')
+            echo "Extracted version: $VERSION"
+
+            # Validate and format version
+            if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              VERSION="v$VERSION"
+            elif [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Invalid version format: $VERSION (expected x.y.z or vx.y.z)"
+              exit 1
+            fi
+
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Version changed to: $VERSION"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No version change detected"
+          fi
+
+      - name: Check if tag exists
+        if: steps.version.outputs.changed == 'true'
+        id: tag_check
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Fetch all tags
+          git fetch --tags
+
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "⚠️  Tag $VERSION already exists, skipping release"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "✅ Tag $VERSION does not exist, will create release"
+          fi
+
+      - name: Generate changelog
+        if: steps.version.outputs.changed == 'true' && steps.tag_check.outputs.exists == 'false'
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "📋 Generating changelog from $PREV_TAG to HEAD"
+            CHANGELOG=$(git log $PREV_TAG..HEAD --pretty=format:"- %s" --no-merges | head -20)
+          else
+            echo "📋 No previous tag found, using recent commits"
+            CHANGELOG=$(git log -10 --pretty=format:"- %s" --no-merges)
+          fi
+
+          # Create release notes
+          {
+            echo "## Changes"
+            echo ""
+            echo "$CHANGELOG"
+            echo ""
+            echo "---"
+            echo ""
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${VERSION}"
+          } > release_notes.md
+
+          cat release_notes.md
+
+      - name: Create and push tag
+        if: steps.version.outputs.changed == 'true' && steps.tag_check.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create annotated tag with changelog
+          git tag -a "$VERSION" -F release_notes.md
+
+          # Push tag (this will trigger the release.yml workflow)
+          git push origin "$VERSION"
+
+          echo "✅ Created and pushed tag: $VERSION"
+          echo "🚀 Release workflow will now build binaries for all platforms"
