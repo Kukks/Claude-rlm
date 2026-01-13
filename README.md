@@ -19,6 +19,8 @@ The Claude RLM plugin implements the Recursive Language Models pattern from [Dee
 - 📈 **Proven Patterns**: Library of research-backed analysis strategies
 - 🤖 **MCP Integration**: Auto-triggered by natural language in Claude
 - 💡 **Repo-local RAG**: Persistent analysis stored in `.rlm/` directory
+- 🔍 **Staleness Detection**: Tracks file changes, warns when cache is outdated (v2.0)
+- 🔌 **Claude-mem Support**: Optional integration for cross-project learning (v2.0)
 
 ### MCP Integration (Recommended!)
 
