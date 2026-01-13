@@ -1,0 +1,7 @@
+This is a simple test document for the RLM orchestrator.
+
+It contains multiple paragraphs to test the basic functionality.
+
+The orchestrator should be able to analyze this document and provide a summary.
+
+This is just a basic smoke test to ensure the core trampoline logic works correctly.

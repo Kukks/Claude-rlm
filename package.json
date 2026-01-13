@@ -1,0 +1,30 @@
+{
+  "name": "claude-rlm",
+  "version": "1.0.0",
+  "description": "Recursive Language Models plugin for Claude Code - Analyze documents beyond context window limits",
+  "main": "src/orchestrator.py",
+  "scripts": {
+    "test": "python -m pytest tests/",
+    "analyze": "python src/orchestrator.py"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kukks/claude-rlm.git"
+  },
+  "keywords": [
+    "claude",
+    "rlm",
+    "recursive",
+    "language-models",
+    "document-analysis",
+    "code-analysis",
+    "ai",
+    "plugin"
+  ],
+  "author": "Claude RLM Team",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Kukks/claude-rlm/issues"
+  },
+  "homepage": "https://github.com/Kukks/claude-rlm#readme"
+}

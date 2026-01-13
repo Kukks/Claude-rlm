@@ -1,0 +1,30 @@
+{
+  "name": "claude-rlm",
+  "version": "1.0.0",
+  "description": "Recursive Language Models plugin for analyzing documents beyond context window limits",
+  "author": "Claude RLM Team",
+  "repository": "https://github.com/Kukks/claude-rlm",
+  "dependencies": {
+    "claude-code": ">=1.0.0"
+  },
+  "commands": [
+    "commands/rlm-analyze.md",
+    "commands/rlm-status.md"
+  ],
+  "agents": [
+    "agents/rlm-explorer.md",
+    "agents/rlm-worker.md"
+  ],
+  "skills": [
+    "skills/rlm-patterns/SKILL.md"
+  ],
+  "settings": {
+    "max_recursion_depth": 10,
+    "cache_enabled": true,
+    "cache_ttl_hours": 24,
+    "auto_save_interval": 5,
+    "parallel_branches": 3,
+    "cost_tracking": true,
+    "claude_mem_integration": false
+  }
+}
