@@ -62,18 +62,24 @@ curl -L https://github.com/Kukks/claude-rlm/releases/latest/download/claude-rlm_
 curl -L https://github.com/Kukks/claude-rlm/releases/latest/download/claude-rlm_darwin_arm64.tar.gz | tar xz
 ./rlm install
 
+# macOS (Intel)
+curl -L https://github.com/Kukks/claude-rlm/releases/latest/download/claude-rlm_darwin_amd64.tar.gz | tar xz
+./rlm install
+```
+
+```powershell
 # Windows (PowerShell)
-Invoke-WebRequest -Uri "https://github.com/Kukks/claude-rlm/releases/latest/download/claude-rlm_windows_amd64.zip" -OutFile "rlm.zip"
-Expand-Archive rlm.zip -DestinationPath .
+iwr "https://github.com/Kukks/claude-rlm/releases/latest/download/claude-rlm_windows_amd64.zip" -OutFile "rlm.zip"
+Expand-Archive rlm.zip -DestinationPath . -Force
 .\rlm.exe install
 ```
 
 The `rlm install` command will:
-- Install the binary to your PATH
+- Install the binary to your PATH (auto-configured on Windows)
 - Auto-detect and configure Claude Desktop (if installed)
 - Auto-detect and configure Claude Code CLI (if installed)
 
-**Verify Installation:**
+**After installation, restart your terminal**, then verify:
 
 ```bash
 rlm --version
