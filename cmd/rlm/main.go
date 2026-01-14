@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -21,7 +22,7 @@ import (
 )
 
 var (
-	Version   = "3.0.3"
+	Version   = "3.0.4"
 	BuildTime = "unknown"
 	GitCommit = "unknown"
 )
@@ -436,15 +437,36 @@ func installBinary() (string, error) {
 
 // addToWindowsPath adds a directory to the user's PATH on Windows
 func addToWindowsPath(dir string) {
-	// Get current user PATH
-	path := os.Getenv("PATH")
-	if strings.Contains(strings.ToLower(path), strings.ToLower(dir)) {
+	// Get current user PATH from registry (not just current session)
+	cmd := exec.Command("powershell", "-NoProfile", "-Command",
+		"[Environment]::GetEnvironmentVariable('PATH', 'User')")
+	output, err := cmd.Output()
+	if err != nil {
+		fmt.Printf("⚠ Could not read PATH: %v\n", err)
+		return
+	}
+
+	userPath := strings.TrimSpace(string(output))
+	if strings.Contains(strings.ToLower(userPath), strings.ToLower(dir)) {
 		return // Already in PATH
 	}
 
-	fmt.Printf("\nNote: Add this directory to your PATH: %s\n", dir)
-	fmt.Println("You can do this by running (in PowerShell as Admin):")
-	fmt.Printf("  [Environment]::SetEnvironmentVariable('PATH', $env:PATH + ';%s', 'User')\n", dir)
+	// Add to user PATH
+	newPath := userPath
+	if newPath != "" {
+		newPath += ";"
+	}
+	newPath += dir
+
+	cmd = exec.Command("powershell", "-NoProfile", "-Command",
+		fmt.Sprintf("[Environment]::SetEnvironmentVariable('PATH', '%s', 'User')", newPath))
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("⚠ Could not update PATH: %v\n", err)
+		fmt.Printf("  You can manually add: %s\n", dir)
+		return
+	}
+
+	fmt.Printf("✓ Added to PATH (restart terminal to use 'rlm' globally)\n")
 }
 
 // configureClaudeDesktop adds RLM to Claude Desktop configuration
