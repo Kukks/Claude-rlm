@@ -527,15 +527,10 @@ func getClaudeDesktopConfigPath() string {
 }
 
 // getClaudeCodeConfigPath returns the Claude Code CLI config path for the current OS
+// Note: MCP servers are stored in ~/.claude.json, not ~/.claude/settings.json
 func getClaudeCodeConfigPath() string {
 	home, _ := os.UserHomeDir()
-	switch runtime.GOOS {
-	case "darwin", "linux":
-		return filepath.Join(home, ".claude", "settings.json")
-	case "windows":
-		return filepath.Join(home, ".claude", "settings.json")
-	}
-	return ""
+	return filepath.Join(home, ".claude.json")
 }
 
 // isClaudeCodeInstalled checks if Claude Code CLI is installed

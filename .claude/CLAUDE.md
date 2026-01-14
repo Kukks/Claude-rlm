@@ -34,7 +34,7 @@ Continue (push to stack) OR Return (pop stack)
 # Download latest release and run install
 rlm install
 
-# Or manually add to Claude settings.json:
+# Or manually add to ~/.claude.json:
 {
   "mcpServers": {
     "rlm": {
