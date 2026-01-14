@@ -28,7 +28,9 @@ builds:
       - -X main.GitCommit={{.ShortCommit}}
 
 archives:
-  - format: tar.gz
+  # Archives with docs for manual download
+  - id: archives
+    format: tar.gz
     name_template: >-
       {{ .ProjectName }}_
       {{- .Os }}_
@@ -40,6 +42,13 @@ archives:
       - README.md
       - LICENSE
       - agents/*
+  # Raw binaries for auto-updater
+  - id: binaries
+    format: binary
+    name_template: >-
+      rlm_
+      {{- .Os }}_
+      {{- .Arch }}
 
 checksum:
   name_template: 'checksums.txt'
