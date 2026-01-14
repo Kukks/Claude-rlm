@@ -1,8 +1,8 @@
-# RLM Plugin for Claude Code
+# RLM - Recursive Language Models for Claude
 
 ## Project Overview
 
-This plugin implements Recursive Language Models (RLM) pattern for analyzing documents beyond context window limits using a trampoline-based continuation approach.
+RLM implements the Recursive Language Models pattern for analyzing documents beyond context window limits using a trampoline-based continuation approach.
 
 ## Core Innovation
 
@@ -11,7 +11,7 @@ This plugin implements Recursive Language Models (RLM) pattern for analyzing doc
 ## Architecture
 
 ```
-Main Orchestrator (Python)
+Main Orchestrator (Go)
     ↓ dispatches
 Explorer/Worker Subagent
     ↓ returns
@@ -22,132 +22,96 @@ Continue (push to stack) OR Return (pop stack)
 
 ## Key Components
 
-1. **Orchestrator** (`src/orchestrator.py`): Manages trampoline loop, state persistence
-2. **Explorer Agent** (`agents/rlm-explorer.md`): Structure analysis, planning, delegation
-3. **Worker Agent** (`agents/rlm-worker.md`): Deep section analysis
-4. **RLM Patterns** (`skills/rlm-patterns/SKILL.md`): Proven analysis strategies
-5. **State Persistence**: `.rlm_state.json` for resume capability
-6. **Response Caching**: `.rlm_cache/` for cost optimization
+1. **Orchestrator** (`internal/orchestrator/orchestrator.go`): Manages trampoline loop, state persistence
+2. **MCP Server** (`internal/mcp/server.go`): Exposes RLM as MCP tools
+3. **Storage Backend** (`internal/storage/`): BM25-based document indexing
+4. **State Persistence**: `.rlm_state.json` for resume capability
+5. **Response Caching**: Built-in cache with TTL
 
-## Usage Patterns
+## Installation
 
-### Start Analysis
 ```bash
-# From command line
-python src/orchestrator.py path/to/document "Your analysis query"
+# Download latest release and run install
+rlm install
 
-# From Claude Code (future)
-/rlm:analyze path/to/document "Your analysis query"
-```
-
-### Resume Analysis
-Analysis is automatically resumable. If interrupted:
-```bash
-python src/orchestrator.py path/to/document "Your analysis query"
-```
-It will detect the existing `.rlm_state.json` and resume from where it left off.
-
-### Check Status
-```bash
-python src/orchestrator.py status
-```
-
-## RLM Patterns
-
-Reference `skills/rlm-patterns/SKILL.md` for:
-- Peek Before Processing
-- Partition and Map
-- Regex-Based Filtering
-- Verification Loop
-- Hierarchical Decomposition
-- Iterative Refinement
-- State Machine Pattern
-
-## Cost Optimization
-
-1. **Response Caching**: 70%+ reduction on similar queries
-2. **Early Filtering**: Only analyze relevant content
-3. **Incremental Processing**: Stop when answer is found
-4. **Smart Delegation**: Workers only spawned when needed
-
-## File Locations
-
-- **State**: `.rlm_state.json` - Current analysis state
-- **Results**: `analysis/chunk_*.json` - Partial results
-- **Cache**: `.rlm_cache/*.json` - Cached analysis results
-- **Config**: `~/.claude-rlm/config.json` - User configuration
-
-## Configuration
-
-Create `~/.claude-rlm/config.json`:
-```json
+# Or manually add to Claude settings.json:
 {
-  "max_recursion_depth": 10,
-  "cache_enabled": true,
-  "cache_ttl_hours": 24,
-  "parallel_branches": 3,
-  "cost_tracking": true
+  "mcpServers": {
+    "rlm": {
+      "command": "path/to/rlm",
+      "args": ["mcp"]
+    }
+  }
 }
 ```
 
-## Development
+## Usage
 
-### Project Structure
+### CLI Commands
+```bash
+# Check status
+rlm status
+
+# Direct analysis (for testing)
+rlm analyze path/to/document "Your analysis query"
+
+# Update to latest version
+rlm update
+
+# Run MCP server (called by Claude)
+rlm mcp
+```
+
+## Configuration
+
+Create `~/.claude-rlm/config.yaml`:
+```yaml
+orchestrator:
+  max_recursion_depth: 10
+  max_iterations: 1000
+  cache_enabled: true
+  cache_ttl_hours: 24
+
+storage:
+  rag_dir: .rlm
+
+logging:
+  level: info
+  format: text
+
+updater:
+  enabled: true
+```
+
+## Project Structure
 ```
 claude-rlm/
-├── .claude-plugin/
-│   └── plugin.json           # Plugin manifest
-├── agents/
-│   ├── rlm-explorer.md       # Structure analysis agent
-│   └── rlm-worker.md         # Deep analysis agent
-├── commands/
-│   ├── rlm-analyze.md        # Analysis command
-│   └── rlm-status.md         # Status command
-├── skills/
-│   └── rlm-patterns/
-│       └── SKILL.md          # RLM strategy patterns
-├── src/
-│   └── orchestrator.py       # Main trampoline loop
-├── .claude/
-│   └── CLAUDE.md             # This file
-└── README.md                 # User documentation
+├── cmd/
+│   └── rlm/
+│       └── main.go              # CLI entry point
+├── internal/
+│   ├── config/                  # Configuration loading
+│   ├── hash/                    # File hashing & staleness
+│   ├── mcp/                     # MCP server implementation
+│   │   ├── protocol.go
+│   │   ├── server.go
+│   │   └── tools.go
+│   ├── orchestrator/            # Trampoline orchestrator
+│   │   ├── cache.go
+│   │   ├── orchestrator.go
+│   │   ├── state.go
+│   │   └── task.go
+│   ├── storage/                 # Document storage & BM25
+│   │   ├── backend.go
+│   │   ├── bm25.go
+│   │   └── models.go
+│   └── updater/                 # Self-update functionality
+├── go.mod
+├── go.sum
+└── README.md
 ```
 
-### Testing
-```bash
-# Test with small document
-python src/orchestrator.py test.txt "Summarize this document"
-
-# Test state persistence
-# 1. Start analysis
-python src/orchestrator.py large.txt "Analyze in detail"
-# 2. Interrupt (Ctrl+C)
-# 3. Resume
-python src/orchestrator.py large.txt "Analyze in detail"
-
-# Test caching
-# Run same query twice, second should be much cheaper
-python src/orchestrator.py doc.txt "Find security issues"
-python src/orchestrator.py doc.txt "Find security issues"
-```
-
-## Research References
-
-- **RLM Paper**: [arxiv.org/abs/2512.24601](https://arxiv.org/abs/2512.24601)
-- **ReDel Framework**: [arxiv.org/abs/2408.02248](https://arxiv.org/abs/2408.02248)
-- **Official RLM Implementation**: [github.com/alexzhang13/rlm](https://github.com/alexzhang13/rlm)
-
-## Key Findings from RLM Paper
-
-- **158% improvement** on code analysis tasks vs base model
-- **35% cost reduction** (median) vs direct context loading
-- Models spontaneously develop verification loops without training
-- Peek-before-processing pattern emerges naturally
-- Regex filtering reduces tokens by 70-90%
-
-## Implementation Notes
-
-### Trampoline Pattern Details
+## Trampoline Pattern Details
 
 The orchestrator maintains a **continuation stack** and executes a loop:
 
@@ -167,7 +131,7 @@ The orchestrator maintains a **continuation stack** and executes a loop:
 
 This pattern allows unlimited recursion depth while respecting the constraint that subagents cannot directly spawn other subagents.
 
-### State Persistence
+## State Persistence
 
 State is saved after every subagent call, containing:
 - Current task
@@ -180,36 +144,37 @@ This enables:
 - Crash recovery
 - Multi-session analysis for very large documents
 
-### Response Caching
+## Research References
 
-Results are cached using a hash of:
-- Agent type
-- Task description
-- Context (sorted JSON)
+- **RLM Paper**: [arxiv.org/abs/2512.24601](https://arxiv.org/abs/2512.24601)
+- **ReDel Framework**: [arxiv.org/abs/2408.02248](https://arxiv.org/abs/2408.02248)
+- **Official RLM Implementation**: [github.com/alexzhang13/rlm](https://github.com/alexzhang13/rlm)
 
-Cache entries have a TTL (default 24 hours) and are automatically cleaned.
+## Key Findings from RLM Paper
 
-## Next Steps
+- **158% improvement** on code analysis tasks vs base model
+- **35% cost reduction** (median) vs direct context loading
+- Models spontaneously develop verification loops without training
+- Peek-before-processing pattern emerges naturally
+- Regex filtering reduces tokens by 70-90%
 
-1. ✅ Core orchestrator with trampoline logic
-2. ✅ Explorer and Worker agent definitions
-3. ✅ RLM patterns library
-4. ✅ Command definitions
-5. ✅ Plugin manifest
-6. ✅ Documentation
-7. ⏳ Integration testing
-8. ⏳ Claude Code plugin integration
-9. ⏳ Claude-mem integration (optional)
-10. ⏳ Performance benchmarking
+## Development
 
-## Contributing
+### Building
+```bash
+go build -o rlm ./cmd/rlm
+```
 
-When adding new features:
-1. Check `skills/rlm-patterns/SKILL.md` for proven patterns
-2. Implement response caching before optimization
-3. Test with small documents first, then scale
-4. Monitor cost metrics in real-time
-5. Update this documentation
+### Testing
+```bash
+go test ./...
+
+# Test specific package
+go test ./internal/orchestrator/...
+```
+
+### Releasing
+Releases are automated via GitHub Actions when a new tag is pushed.
 
 ## License
 
